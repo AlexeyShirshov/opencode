@@ -344,7 +344,12 @@ export const LspTool = Tool.define(
             if (!available) throw new Error("No LSP server available for the project files.")
             yield* lsp.touchFile(file)
             if (!query || readyRoots.has(key)) return file
-            const deadline = Date.now() + 20000
+            // A cold language server loads the whole solution before workspace/symbol
+            // returns anything; large solutions can take minutes. Override with
+            // OPENCODE_LSP_READY_TIMEOUT_MS.
+            const configured = Number(process.env.OPENCODE_LSP_READY_TIMEOUT_MS)
+            const readyTimeout = Number.isFinite(configured) && configured > 0 ? configured : 120000
+            const deadline = Date.now() + readyTimeout
             while (Date.now() < deadline) {
               const probe = yield* lsp.searchSymbols(query, file)
               if (probe.length > 0) {
