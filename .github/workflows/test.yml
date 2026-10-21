@@ -121,10 +121,12 @@ jobs:
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}
 
-      # bun 1.4.2 intermittently segfaults on Windows when a script spawns a nested bun process, which is how
-      # turbo runs each package's test script. Successful tasks are cached, so this only retries the crash.
-      - name: Retry unit tests after a Windows bun crash
-        if: failure() && runner.os == 'Windows'
+      # Flaky on GitHub-hosted runners: bun 1.4.2 intermittently segfaults on Windows when a script spawns a
+      # nested bun process (which is how turbo runs each package's test script), and a few timing-sensitive
+      # tests exceed their per-test timeout under parallel load. Successful tasks are cached, so this reruns
+      # only the packages that failed.
+      - name: Retry unit tests after a runner flake
+        if: failure()
         timeout-minutes: 20
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -133,7 +135,7 @@ jobs:
           fi
           GITHUB_ACTIONS=false bun turbo test --affected --concurrency=3
         env:
-          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}
 
