@@ -1,0 +1,39 @@
+name: debug-core-tests
+
+# Temporary: reproduces individual packages/core test files on a GitHub-hosted runner with full output.
+on:
+  workflow_dispatch:
+    inputs:
+      tests:
+        description: "Space-separated test files relative to packages/core"
+        default: "test/git.test.ts test/tool-shell.test.ts"
+
+jobs:
+  debug:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Report tooling versions
+        run: |
+          git --version
+          bun --version
+          pwsh --version || echo "pwsh missing"
+
+      - name: Configure git identity
+        run: |
+          git config --global user.email "bot@opencode.ai"
+          git config --global user.name "opencode"
+
+      - name: Run selected core tests
+        working-directory: packages/core
+        timeout-minutes: 25
+        env:
+          GITHUB_ACTIONS: "false"
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "false"
+        run: bun test ${{ inputs.tests }} 2>&1 | tail -400
