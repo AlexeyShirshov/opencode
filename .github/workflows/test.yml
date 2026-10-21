@@ -83,6 +83,17 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      # Test harnesses block outbound fetches, so the ripgrep binary the search tests spawn must already exist.
+      # Blacksmith images ship one; the GitHub-hosted images do not.
+      - name: Install ripgrep
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            choco install ripgrep -y --no-progress
+          else
+            sudo apt-get update -qq
+            sudo apt-get install -y ripgrep
+          fi
+
       - name: Test Effect simplification rules
         if: runner.os == 'Linux'
         run: bun run test:effect-simplification-rules
