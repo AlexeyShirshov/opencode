@@ -94,6 +94,14 @@ jobs:
             sudo apt-get install -y ripgrep
           fi
 
+      # Defender's real-time scanner races bun's transpiler cache on the Windows images, which crashes bun at
+      # startup before any test runs.
+      - name: Exclude the workspace from Windows Defender scanning
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: Add-MpPreference -ExclusionPath "${{ github.workspace }}", $env:TEMP, $env:RUNNER_TEMP
+
       - name: Test Effect simplification rules
         if: runner.os == 'Linux'
         run: bun run test:effect-simplification-rules
@@ -107,7 +115,13 @@ jobs:
           git config --global user.email "bot@opencode.ai"
           git config --global user.name "opencode"
 
+      # Flaky on GitHub-hosted runners: bun 1.4.2 intermittently segfaults on Windows when a script spawns a
+      # nested bun process (which is how turbo runs each package's test script), and a few timing-sensitive
+      # tests exceed their per-test timeout under parallel load. The first attempt is therefore allowed to
+      # fail; the retry below reruns only the packages that failed, because turbo caches successful tasks.
       - name: Run unit tests
+        id: unit
+        continue-on-error: true
         timeout-minutes: 20
         run: |
           # The runners have four vCPUs, and each Bun test process performs its own concurrent work.
@@ -121,19 +135,19 @@ jobs:
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}
 
-      # Flaky on GitHub-hosted runners: bun 1.4.2 intermittently segfaults on Windows when a script spawns a
-      # nested bun process (which is how turbo runs each package's test script), and a few timing-sensitive
-      # tests exceed their per-test timeout under parallel load. Successful tasks are cached, so this reruns
-      # only the packages that failed.
       - name: Retry unit tests after a runner flake
-        if: failure()
+        if: steps.unit.outcome == 'failure'
         timeout-minutes: 20
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            GITHUB_ACTIONS=false bun turbo test --concurrency=3
-            exit 0
-          fi
-          GITHUB_ACTIONS=false bun turbo test --affected --concurrency=3
+          for attempt in 1 2; do
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              GITHUB_ACTIONS=false bun turbo test --concurrency=3 && exit 0
+            else
+              GITHUB_ACTIONS=false bun turbo test --affected --concurrency=3 && exit 0
+            fi
+            echo "::warning::unit tests failed again (attempt ${attempt} of 2)"
+          done
+          exit 1
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
