@@ -1,16 +1,12 @@
 name: debug-core-tests
 
-# Temporary: reproduces individual package test scripts on GitHub-hosted runners with full output.
+# Temporary: narrows down the bun 1.4.2 crash in packages/util on the windows-2025 image.
 on:
   workflow_dispatch:
 
 jobs:
   windows-util:
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [windows-2025, windows-2022]
-    runs-on: ${{ matrix.runner }}
+    runs-on: windows-2025
     defaults:
       run:
         shell: bash
@@ -19,14 +15,26 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Report tooling versions
-        run: |
-          bun --version
-          ver || true
-
-      - name: Run util tests
+      - name: bun test
         working-directory: packages/util
-        timeout-minutes: 15
+        continue-on-error: true
+        run: bun test 2>&1 | tail -5
+
+      - name: bun test --only-failures
+        working-directory: packages/util
+        continue-on-error: true
+        run: bun test --only-failures 2>&1 | tail -5
+
+      - name: bun run test
+        working-directory: packages/util
+        continue-on-error: true
+        run: bun run test 2>&1 | tail -20
+
+      - name: bun run test with turbo env
+        working-directory: packages/util
+        continue-on-error: true
         env:
-          GITHUB_ACTIONS: "false"
-        run: bun test --only-failures 2>&1 | tail -200
+          TURBO_HASH: deadbeef
+          TURBO_TASK_HAS_CACHE: "true"
+          FORCE_COLOR: "1"
+        run: bun run test 2>&1 | tail -20
