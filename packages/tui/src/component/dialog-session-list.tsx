@@ -89,6 +89,7 @@ export function DialogSessionList() {
     const query = search().trim().toLowerCase()
     return [...result.map((session) => synced.get(session.id) ?? session), ...extra]
       .filter((session) => !deleted().has(session.id))
+      .filter((session) => !session.time.archived)
       .filter((session) => !query || session.title.toLowerCase().includes(query))
   })
 

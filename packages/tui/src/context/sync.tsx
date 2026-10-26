@@ -283,15 +283,27 @@ export const {
           break
         }
         case "session.updated": {
-          const result = search(store.session, event.properties.info.id, (s) => s.id)
+          const info = event.properties.info
+          const result = search(store.session, info.id, (s) => s.id)
+          if (info.time.archived) {
+            if (result.found) {
+              setStore(
+                "session",
+                produce((draft) => {
+                  draft.splice(result.index, 1)
+                }),
+              )
+            }
+            break
+          }
           if (result.found) {
-            setStore("session", result.index, reconcile(event.properties.info))
+            setStore("session", result.index, reconcile(info))
             break
           }
           setStore(
             "session",
             produce((draft) => {
-              draft.splice(result.index, 0, event.properties.info)
+              draft.splice(result.index, 0, info)
             }),
           )
           break
